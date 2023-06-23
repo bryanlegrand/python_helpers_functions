@@ -2,6 +2,15 @@
 
 import tensorflow as tf
 
+def preprocess_img(image, label, img_shape=224):
+  """
+  Converts image dataype from `uint8` to `float32` and reshapes
+  image to [img_shape, img_shape, 3]
+  """
+  image = tf.image.resize(image, [img_shape, img_shape])
+  # image = image/255. # to scale our image, not required for effecientnet
+  return tf.cast(image, tf.float32), label # return (float32_image, label) tuple
+
 # load prep image
 def load_and_prep_image(filename, img_shape=224, scale=True):
   """
