@@ -1,17 +1,44 @@
-### A bunch of created helper functions that can be useful and used in other projects.
-
+##############################################
+############ IMPORT DEPENDENCIES #############
+##############################################
 import tensorflow as tf
+import itertools
+import matplotlib.pyplot as plt
+import numpy as np
+from sklearn.metrics import confusion_matrix
+import datetime
+import zipfile
+from sklearn.metrics import accuracy_score, precision_recall_fscore_support
+import os
 
-def preprocess_img(image, label, img_shape=224):
+
+##############################################
+########### IMAGE HELPER FUNCTIONS ###########
+##############################################
+
+
+def preprocess_img(image, label, img_shape=224, rescale=False):
   """
   Converts image dataype from `uint8` to `float32` and reshapes
-  image to [img_shape, img_shape, 3]
+  image to [img_shape, img_shape, 3], returns img and label
+
+  Args:
+    image: image passed
+    label: label passed
+    img_shape: output shape desired, default is 224
+    rescale: to rescale our image or not by dividing by 255.
+
+  Returns:
+    A tuple of (Peprocessed image, Label)
   """
   image = tf.image.resize(image, [img_shape, img_shape])
-  # image = image/255. # to scale our image, not required for effecientnet
+  if rescale==True:
+    image = image/255. # to scale our image, not required for effecientnet
+  else:
+    pass
   return tf.cast(image, tf.float32), label # return (float32_image, label) tuple
 
-# load prep image
+
 def load_and_prep_image(filename, img_shape=224, scale=True):
   """
   Reads in an image from filename, turns it into a tensor and reshapes into
@@ -36,14 +63,108 @@ def load_and_prep_image(filename, img_shape=224, scale=True):
     return img
 
 
-# Note: The following confusion matrix code is a remix of Scikit-Learn's 
-# plot_confusion_matrix function - https://scikit-learn.org/stable/modules/generated/sklearn.metrics.plot_confusion_matrix.html
-import itertools
-import matplotlib.pyplot as plt
-import numpy as np
-from sklearn.metrics import confusion_matrix
+def pred_and_plot(model, filename, class_names):
+  """
+  Imports an image located at filename, makes a prediction on it with
+  a trained model and plots the image with the predicted class as the title.
+  """
+  # Import the target image and preprocess it
+  img = load_and_prep_image(filename)
 
-# Our function needs a different name to sklearn's plot_confusion_matrix
+  # Make a prediction
+  pred = model.predict(tf.expand_dims(img, axis=0))
+
+  # Get the predicted class
+  if len(pred[0]) > 1: # check for multi-class
+    pred_class = class_names[pred.argmax()] # if more than one output, take the max
+  else:
+    pred_class = class_names[int(tf.round(pred)[0][0])] # if only one output, round
+
+  # Plot the image and predicted class
+  plt.imshow(img)
+  plt.title(f"Prediction: {pred_class}")
+  plt.axis(False);
+
+
+
+
+
+##############################################
+######## EVALUATION HELPER FUNCTIONS #########
+##############################################
+
+
+def evaluate_binary_classification_scores(y_true, y_pred):
+  """
+  Calculates model accuracy, precision, recall and f1 score of a binary classification model.
+
+  Args:
+      y_true: true labels in the form of a 1D array
+      y_pred: predicted labels in the form of a 1D array
+
+  Returns a dictionary of accuracy, precision, recall, f1-score.
+  """
+  # Calculate model accuracy
+  model_accuracy = accuracy_score(y_true, y_pred) * 100
+  # Calculate model precision, recall and f1 score using "weighted average
+  model_precision, model_recall, model_f1, _ = precision_recall_fscore_support(y_true, y_pred, average="weighted")
+  model_results = {"accuracy": model_accuracy,
+                  "precision": model_precision,
+                  "recall": model_recall,
+                  "f1": model_f1}
+  return model_results
+
+
+def make_pretty_confusion_matrix(y_true, y_pred, classes=None, figsize=(10,10), text_size=5):
+  """
+  Plot a beautiful confusion matrix based on the number of classes introduced or not. Can also specify the size of the matrix as well as the text size of the labels.
+  """
+  # create the confusion matrix
+  cm = confusion_matrix(y_true, y_pred)
+  cm_norm = cm.astype("float") / cm.sum(axis=1)[:, np.newaxis] # normalize our confusion matrix
+  n_classes = cm.shape[0]
+
+  # let's prettify it
+  fig, ax = plt.subplots(figsize=figsize)
+  # create a matrix plot
+  cax = ax.matshow(cm, cmap=plt.cm.Blues)
+  fig.colorbar(cax)
+
+  # set labels to be classes
+  if classes:
+    labels = classes
+  else:
+    labels = np.arange(cm.shape[0])
+
+  # label the axes
+  ax.set(title="Confusion Matrix",
+        xlabel="Predicted Label",
+        ylabel="True Label",
+        xticks=np.arange(n_classes),
+        yticks=np.arange(n_classes),
+        xticklabels=labels,
+        yticklabels=labels)
+
+  # Set x-axis labels to bottom
+  ax.xaxis.set_label_position("bottom")
+  ax.xaxis.tick_bottom()
+
+  # Adjust label size
+  ax.xaxis.label.set_size(text_size)
+  ax.yaxis.label.set_size(text_size)
+  ax.title.set_size(text_size)
+
+  # set threshold level
+  threshold = (cm.max() + cm.min()) / 2.
+
+  # plot the text on each cell
+  for i, j in itertools.product(range(cm.shape[0]), range(cm.shape[1])):
+    plt.text(j, i , f"{cm[i, j]} ({cm_norm[i, j]*100:.1f}%)",
+            horizontalalignment="center",
+            color="white" if cm[i, j] > threshold else "black",
+            size=text_size)
+
+
 def make_confusion_matrix(y_true, y_pred, classes=None, figsize=(10, 10), text_size=15, norm=False, savefig=False): 
   """Makes a labelled confusion matrix comparing predictions and ground truth labels.
 
@@ -118,30 +239,14 @@ def make_confusion_matrix(y_true, y_pred, classes=None, figsize=(10, 10), text_s
   if savefig:
     fig.savefig("confusion_matrix.png")
   
-# Make a function to predict on images and plot them (works with multi-class)
-def pred_and_plot(model, filename, class_names):
-  """
-  Imports an image located at filename, makes a prediction on it with
-  a trained model and plots the image with the predicted class as the title.
-  """
-  # Import the target image and preprocess it
-  img = load_and_prep_image(filename)
 
-  # Make a prediction
-  pred = model.predict(tf.expand_dims(img, axis=0))
-
-  # Get the predicted class
-  if len(pred[0]) > 1: # check for multi-class
-    pred_class = class_names[pred.argmax()] # if more than one output, take the max
-  else:
-    pred_class = class_names[int(tf.round(pred)[0][0])] # if only one output, round
-
-  # Plot the image and predicted class
-  plt.imshow(img)
-  plt.title(f"Prediction: {pred_class}")
-  plt.axis(False);
   
-import datetime
+
+
+##############################################
+######### TRAINING HELPER FUNCTIONS ##########
+##############################################
+
 
 def create_tensorboard_callback(dir_name, experiment_name):
   """
@@ -163,6 +268,7 @@ def create_tensorboard_callback(dir_name, experiment_name):
 
 # Plot the validation and training data separately
 import matplotlib.pyplot as plt
+
 
 def plot_loss_curves(history):
   """
@@ -193,6 +299,7 @@ def plot_loss_curves(history):
   plt.title('Accuracy')
   plt.xlabel('Epochs')
   plt.legend();
+
 
 def compare_historys(original_history, new_history, initial_epochs=5):
     """
@@ -237,10 +344,59 @@ def compare_historys(original_history, new_history, initial_epochs=5):
     plt.title('Training and Validation Loss')
     plt.xlabel('epoch')
     plt.show()
-  
-# Create function to unzip a zipfile into current working directory 
-# (since we're going to be downloading and unzipping a few files)
-import zipfile
+
+
+
+
+
+##############################################
+##### DATA EXPLORATION HELPER FUNCTIONS ######
+##############################################
+
+
+def missing_values(df):
+  """
+  A simple function to give the percentage of missing values in a dataframe by columns
+  """
+  num_missing = df.isnull().sum()
+  percent_missing = round(df.isnull().sum() * 100 / len(df), 2)
+  missing_value_df = pd.DataFrame(
+      {"num_missing": num_missing, "percent_missing": percent_missing}
+  )
+  missing_value_df.sort_values('percent_missing', inplace=True, ascending=False)
+
+  return missing_value_df[missing_value_df.percent_missing > 0]
+
+
+def cutoff_outliers(df, std_multiplier=3, drop=False):
+  """
+  Will iterate over all the numeric columns in a dataset and automatically replace the outliers with null values.
+
+  Args:
+    - std_multiplier : How many standard deviations to consider when doing this, 3 is default
+    - drop : Drop rows containing the null values or return the df with null values
+
+  Returns:
+    - A pandas dataframe with or without null values depending on variable drop
+  """
+  for column in df.select_dtypes(include='number').columns.tolist():
+    column_mean = df[column].mean()
+    column_std = df[column].std()
+    upper_limit = column_mean + (std_multiplier * column_std)
+    lower_limit = column_mean - (std_multiplier * column_std)
+
+    df[column] = df[column].apply(lambda x: x if (lower_limit <= x <= upper_limit) else np.NaN)
+
+  if drop==False:
+    return df
+  else:
+    return df.dropna()
+
+
+##############################################
+############ OS HELPER FUNCTIONS #############
+##############################################
+
 
 def unzip_data(filename):
   """
@@ -253,9 +409,6 @@ def unzip_data(filename):
   zip_ref.extractall()
   zip_ref.close()
 
-# Walk through an image classification directory and find out how many files (images)
-# are in each subdirectory.
-import os
 
 def walk_through_dir(dir_path):
   """
@@ -272,26 +425,3 @@ def walk_through_dir(dir_path):
   """
   for dirpath, dirnames, filenames in os.walk(dir_path):
     print(f"There are {len(dirnames)} directories and {len(filenames)} images in '{dirpath}'.")
-    
-# Function to evaluate: accuracy, precision, recall, f1-score
-from sklearn.metrics import accuracy_score, precision_recall_fscore_support
-
-def calculate_results(y_true, y_pred):
-  """
-  Calculates model accuracy, precision, recall and f1 score of a binary classification model.
-
-  Args:
-      y_true: true labels in the form of a 1D array
-      y_pred: predicted labels in the form of a 1D array
-
-  Returns a dictionary of accuracy, precision, recall, f1-score.
-  """
-  # Calculate model accuracy
-  model_accuracy = accuracy_score(y_true, y_pred) * 100
-  # Calculate model precision, recall and f1 score using "weighted average
-  model_precision, model_recall, model_f1, _ = precision_recall_fscore_support(y_true, y_pred, average="weighted")
-  model_results = {"accuracy": model_accuracy,
-                  "precision": model_precision,
-                  "recall": model_recall,
-                  "f1": model_f1}
-  return model_results
