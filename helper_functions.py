@@ -11,6 +11,14 @@ import zipfile
 from sklearn.metrics import accuracy_score, precision_recall_fscore_support
 import os
 
+def list_functions("helper_functions.py"):
+  """Lists all of the functions in the specified Python file."""
+  with open(filename, 'r') as f:
+    source = f.read()
+  functions = re.findall(r'def\s+([\w\_]+)\s*\((.*?)\)', source)
+  return functions
+
+
 
 
 ##############################################
@@ -86,6 +94,49 @@ def make_train_test_splits(windows, labels, test_split=0.2):
   return train_windows, test_windows, train_labels, test_labels
 
 
+def create_time_series_features(df):
+  """
+  Takes a dataframe where the index is a date time with hour and returns the dataframe with hour, dayofweek, quarter, month, year, day of year features added
+  """
+  df = df.copy()
+  df["hour"] = df.index.hour
+  df["day_of_week"] = df.index.dayofweek
+  df["quarter"] = df.index.quarter
+  df["month"] = df.index.month
+  df["year"] = df.index.year
+  df["day_of_year"] = df.index.dayofyear
+  df["day_of_month"] = df.index.day
+  df["week_of_year"] = df.index.isocalendar().week
+
+  df['is_month_start'] = df.index.is_month_start.astype(np.int8)
+  df['is_month_end'] = df.index.is_month_end.astype(np.int8)
+  df['monday'] = df.index.weekday==0
+  df['monday'] = df['monday'].astype(int)
+  df['tuesday'] = df.index.weekday==1
+  df['tuesday'] = df['tuesday'].astype(int)
+  df['wednesday'] = df.index.weekday==2
+  df['wednesday'] = df['wednesday'].astype(int)
+  df['thursday'] = df.index.weekday==3
+  df['thursday'] = df['thursday'].astype(int)
+  df['friday'] = df.index.weekday==4
+  df['friday'] = df['friday'].astype(int)
+  df['saturday'] = df.index.weekday==5
+  df['saturday'] = df['saturday'].astype(int)
+  df['sunday'] = df.index.weekday==6
+  df['sunday'] = df['sunday'].astype(int)
+  df['is_quarter_end'] = df.index.is_quarter_end.astype(int)
+  df['is_quarter_start'] = df.index.is_quarter_start.astype(int)
+  df['is_year_end'] = df.index.is_year_end.astype(int)
+  df['is_year_start'] = df.index.is_year_start.astype(int)
+
+  return df
+
+def create_seasonality_features(df):
+    df['month_sin'] = np.sin(2*np.pi*df.month/12)
+    df['month_cos'] = np.cos(2*np.pi*df.month/12)
+    df['day_sin'] = np.sin(2*np.pi*df.day_of_year/24)
+    df['day_cos'] = np.cos(2*np.pi*df.day_of_year/24)
+    return df
 
 
 ##############################################
@@ -163,6 +214,22 @@ def pred_and_plot(model, filename, class_names):
 
 
 
+
+##############################################
+#######$# METRICS HELPER FUNCTIONS ###########
+##############################################
+
+def metric_smape(y_true, y_pred):
+   y_true = tf.cast(y_true, tf.float32)
+   y_pred = tf.cast(y_pred, tf.float32)
+   num = tf.math.abs(tf.math.subtract(y_true, y_pred))
+   denom = tf.math.add(tf.math.abs(y_true), tf.math.abs(y_pred))
+   denom = tf.math.divide(denom,200.0)
+
+   val = tf.math.divide(num,denom)
+   val = tf.where(denom == 0.0, 0.0, val)
+
+   return tf.reduce_mean(val)
 
 
 ##############################################
