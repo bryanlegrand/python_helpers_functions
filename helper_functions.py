@@ -11,7 +11,7 @@ import zipfile
 from sklearn.metrics import accuracy_score, precision_recall_fscore_support
 import os
 
-def list_functions("helper_functions.py"):
+def list_functions(filename="/content/helper_functions.py"):
   """Lists all of the functions in the specified Python file."""
   with open(filename, 'r') as f:
     source = f.read()
