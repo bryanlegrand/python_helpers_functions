@@ -10,14 +10,7 @@ import datetime
 import zipfile
 from sklearn.metrics import accuracy_score, precision_recall_fscore_support
 import os
-import re
 
-def list_functions(filename="/content/helper_functions.py"):
-  """Lists all of the functions in the specified Python file."""
-  with open(filename, 'r') as f:
-    source = f.read()
-  functions = re.findall(r'def\s+([\w\_]+)\s*\((.*?)\)', source)
-  return functions
 
 
 
